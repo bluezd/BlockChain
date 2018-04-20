@@ -101,6 +101,12 @@ func (t *IntegralChaincode) initIntegral(stub shim.ChaincodeStubInterface, args 
 		addNote = fmt.Sprintf("[%s] <init> %d integral", currentTime, integralCount)
 	}
 
+	if res := enterpriseNameCheck(enterpriseName); res != true {
+		s := fmt.Sprintf("!! Invalid Enterprise Name: %s !!\n", enterpriseName)
+		fmt.Printf(s)
+		return shim.Error(s)
+	}
+
 	// construct the key
 	keyComposite := userName + "-" + enterpriseName
 
@@ -153,6 +159,12 @@ func (t *IntegralChaincode) addIntegral(stub shim.ChaincodeStubInterface, args [
 	integralCount, _ := strconv.Atoi(args[2])
 
 	currentTime := timeHelper()
+
+	if res := enterpriseNameCheck(enterpriseName); res != true {
+		s := fmt.Sprintf("!! Invalid Enterprise Name: %s !!\n", enterpriseName)
+		fmt.Printf(s)
+		return shim.Error(s)
+	}
 
 	// construct the key
 	keyComposite := userName + "-" + enterpriseName
@@ -291,6 +303,13 @@ func (t *IntegralChaincode) convertIntegral(stub shim.ChaincodeStubInterface, ar
 	origEnterpriseName := strings.ToLower(args[1])
 	targetEnterpriseName := strings.ToLower(args[2])
 	convertIntegralCount, _ := strconv.Atoi(args[3])
+
+	if !enterpriseNameCheck(origEnterpriseName) || !enterpriseNameCheck(targetEnterpriseName) {
+		s := fmt.Sprintf("!! Invalid Enterprise Name !!\n")
+		fmt.Printf(s)
+		return shim.Error(s)
+	}
+
 	// construct the key
 	keyComposite := userName + "-" + origEnterpriseName
 
@@ -431,6 +450,17 @@ func (t *IntegralChaincode) deleteIntegral(stub shim.ChaincodeStubInterface, arg
 	return shim.Success(nil)
 }
 */
+
+var enterpriseNameList = []string{"bank", "telecom", "shopping_mall"}
+
+func enterpriseNameCheck(name string) bool {
+	for _, value := range enterpriseNameList {
+		if name == value {
+			return true
+		}
+	}
+	return false
+}
 
 func timeHelper() string {
 	t := time.Now()

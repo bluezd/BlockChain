@@ -35,7 +35,7 @@ type IntegralChaincode struct {
 }
 
 type Integral struct {
-	UserName       string `json:"userNme"`
+	UserName       string `json:"userName"`
 	EnterpriseName string `json:"enterpriseName"`
 	IntegralCount  int    `json:"integralCount"`
 	AddNote        string `json:"addNote"`
@@ -64,9 +64,17 @@ func (t *IntegralChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		return t.queryIntegral(stub, args)
 	} else if function == "queryHistoryIntegral" {
 		return t.queryHistoryIntegral(stub, args)
-		//} else if function == "deleteIntegral" {
-		//		return t.deleteIntegral(stub, args)
+	} else if function == "queryIntegralBasedOnUser" {
+		return t.queryIntegralBasedOnUser(stub, args)
 	}
+
+	//} else if function == "queryIntegralByUser" {
+	//	return t.queryIntegralByUser(stub, args)
+	//}
+
+	//} else if function == "deleteIntegral" {
+	//		return t.deleteIntegral(stub, args)
+	//}
 
 	fmt.Printf("!! invalid function: %s !!", function)
 	return shim.Error("Received unknown function invocation")
@@ -131,6 +139,12 @@ func (t *IntegralChaincode) initIntegral(stub shim.ChaincodeStubInterface, args 
 		return shim.Error(err.Error())
 	}
 
+	indexName := "username~all"
+	err = createIndex(stub, indexName, []string{integralRecord.UserName, integralRecord.EnterpriseName, strconv.Itoa(integralRecord.IntegralCount)})
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
 	fmt.Println("- end init integral")
 	return shim.Success(nil)
 }
@@ -177,8 +191,16 @@ func (t *IntegralChaincode) addIntegral(stub shim.ChaincodeStubInterface, args [
 		fmt.Printf("!! integral record does not exist: %s !!", keyComposite)
 		return shim.Error("Integral UserName does not exist: " + keyComposite)
 	}
+
 	integralRecord := &Integral{}
 	err = json.Unmarshal(integralRecordAsBytes, integralRecord)
+
+	// Remove search index
+	indexName := "username~all"
+	err = deleteIndex(stub, indexName, []string{integralRecord.UserName, integralRecord.EnterpriseName, strconv.Itoa(integralRecord.IntegralCount)})
+	if err != nil {
+		return shim.Error(err.Error())
+	}
 	integralRecord.IntegralCount += integralCount
 	integralRecord.AddNote = fmt.Sprintf("[%s] <add> %d integral", currentTime, integralCount)
 
@@ -189,6 +211,13 @@ func (t *IntegralChaincode) addIntegral(stub shim.ChaincodeStubInterface, args [
 
 	// Add Record to State
 	err = stub.PutState(keyComposite, integralRecordJSONBytes)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	// Add search index
+	indexName = "username~all"
+	err = createIndex(stub, indexName, []string{integralRecord.UserName, integralRecord.EnterpriseName, strconv.Itoa(integralRecord.IntegralCount)})
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -359,6 +388,13 @@ func (t *IntegralChaincode) convertIntegral(stub shim.ChaincodeStubInterface, ar
 	currentTime := timeHelper()
 	fmt.Printf("   - orig username=%s, enterprisename=%s, ingegral=%d\n", origIntegralRecord.UserName, origIntegralRecord.EnterpriseName, origIntegralRecord.IntegralCount)
 
+	// Remove search index
+	indexName := "username~all"
+	err = deleteIndex(stub, indexName, []string{origIntegralRecord.UserName, origIntegralRecord.EnterpriseName, strconv.Itoa(origIntegralRecord.IntegralCount)})
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
 	// update the orig State
 	fmt.Printf("   - update the orig (%s) state\n", keyComposite)
 	origIntegralRecord.IntegralCount = integralRateMap[origIntegralRecord.EnterpriseName]
@@ -374,6 +410,13 @@ func (t *IntegralChaincode) convertIntegral(stub shim.ChaincodeStubInterface, ar
 		return shim.Error(err.Error())
 	}
 	//delete(integralRateMap, origIntegralRecord.EnterpriseName)
+
+	// Create search index
+	indexName = "username~all"
+	err = createIndex(stub, indexName, []string{origIntegralRecord.UserName, origIntegralRecord.EnterpriseName, strconv.Itoa(origIntegralRecord.IntegralCount)})
+	if err != nil {
+		return shim.Error(err.Error())
+	}
 
 	// handle the target
 	// construct the key
@@ -392,6 +435,12 @@ func (t *IntegralChaincode) convertIntegral(stub shim.ChaincodeStubInterface, ar
 	if targetIntegralRecordAsBytes != nil {
 		targetIntegralRecord = new(Integral)
 		err = json.Unmarshal(targetIntegralRecordAsBytes, targetIntegralRecord)
+		// Remove search index
+		indexName := "username~all"
+		err = deleteIndex(stub, indexName, []string{targetIntegralRecord.UserName, targetIntegralRecord.EnterpriseName, strconv.Itoa(targetIntegralRecord.IntegralCount)})
+		if err != nil {
+			return shim.Error(err.Error())
+		}
 		targetIntegralRecord.IntegralCount += integralRateMap[targetEnterpriseName]
 	} else {
 		targetIntegralRecord = &Integral{userName, targetEnterpriseName, integralRateMap[targetEnterpriseName], ""}
@@ -407,6 +456,12 @@ func (t *IntegralChaincode) convertIntegral(stub shim.ChaincodeStubInterface, ar
 		return shim.Error(err.Error())
 	}
 	err = stub.PutState(keyComposite, targetIntegralRecordJSONBytes)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	// Create search index
+	indexName = "username~all"
+	err = createIndex(stub, indexName, []string{targetIntegralRecord.UserName, targetIntegralRecord.EnterpriseName, strconv.Itoa(targetIntegralRecord.IntegralCount)})
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -449,7 +504,172 @@ func (t *IntegralChaincode) deleteIntegral(stub shim.ChaincodeStubInterface, arg
 	fmt.Println("- end delete integral -")
 	return shim.Success(nil)
 }
+
+func (t *IntegralChaincode) queryIntegralByUser(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	if len(args) != 1 {
+		return shim.Error("Incorrect number of arguments. Expecting 1")
+	}
+
+	userName := strings.ToLower(args[0])
+	queryString := fmt.Sprintf("{\"selector\":{\"userName\":\"%s\"}}", userName)
+	queryResults, err := getQueryResultForQueryString(stub, queryString)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	return shim.Success(queryResults)
+}
 */
+
+func (t *IntegralChaincode) queryIntegralBasedOnUser(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	if len(args) != 1 {
+		return shim.Error("Incorrect number of arguments. Expecting 1")
+	}
+	userName := strings.ToLower(args[0])
+	fmt.Println("- start queryIntegralBasedOnUser ", userName)
+
+	// Query the username~all index by color
+	// This will execute a key range query on all keys starting with 'userName'
+	integralResultsIterator, err := stub.GetStateByPartialCompositeKey("username~all", []string{userName})
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	defer integralResultsIterator.Close()
+
+	var buffer bytes.Buffer
+	buffer.WriteString("[")
+
+	bArrayMemberAlreadyWritten := false
+	var i int
+	for i = 0; integralResultsIterator.HasNext(); i++ {
+		// Note that we don't get the value (2nd return variable), we'll just get the marble name from the composite key
+		responseRange, err := integralResultsIterator.Next()
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+
+		objectType, compositeKeyParts, err := stub.SplitCompositeKey(responseRange.Key)
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+		if bArrayMemberAlreadyWritten == true {
+			buffer.WriteString(",")
+		}
+		returnedUserName := compositeKeyParts[0]
+		returnedEnterpriseName := compositeKeyParts[1]
+		returnedIntegralCount, _ := strconv.Atoi(compositeKeyParts[2])
+		fmt.Printf("- found a integral record from index:%s userName:%s enterpriseName:%s integral:%d\n", objectType, returnedUserName, returnedEnterpriseName, returnedIntegralCount)
+		buffer.WriteString("{\"userName\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(returnedUserName)
+		buffer.WriteString("\"")
+
+		buffer.WriteString(", \"enterpriseName\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(returnedEnterpriseName)
+		buffer.WriteString("\"")
+
+		buffer.WriteString(", \"integralCount\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(strconv.Itoa(returnedIntegralCount))
+		buffer.WriteString("\"")
+
+		buffer.WriteString("}")
+		bArrayMemberAlreadyWritten = true
+	}
+	buffer.WriteString("]")
+
+	fmt.Printf("-  queryIntegralBasedOnUser returning:\n   %s\n", buffer.String())
+	return shim.Success(buffer.Bytes())
+}
+
+// =========================================================================================
+// getQueryResultForQueryString executes the passed in query string.
+// Result set is built and returned as a byte array containing the JSON results.
+// =========================================================================================
+/*
+func getQueryResultForQueryString(stub shim.ChaincodeStubInterface, queryString string) ([]byte, error) {
+
+	fmt.Printf("- getQueryResultForQueryString queryString:\n%s\n", queryString)
+
+	resultsIterator, err := stub.GetQueryResult(queryString)
+	if err != nil {
+		return nil, err
+	}
+	defer resultsIterator.Close()
+
+	// buffer is a JSON array containing QueryRecords
+	var buffer bytes.Buffer
+	buffer.WriteString("[")
+
+	bArrayMemberAlreadyWritten := false
+	for resultsIterator.HasNext() {
+		queryResponse, err := resultsIterator.Next()
+		if err != nil {
+			return nil, err
+		}
+		// Add a comma before array members, suppress it for the first array member
+		if bArrayMemberAlreadyWritten == true {
+			buffer.WriteString(",")
+		}
+		buffer.WriteString("{\"Key\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(queryResponse.Key)
+		buffer.WriteString("\"")
+
+		buffer.WriteString(", \"Record\":")
+		// Record is a JSON object, so we write as-is
+		buffer.WriteString(string(queryResponse.Value))
+		buffer.WriteString("}")
+		bArrayMemberAlreadyWritten = true
+	}
+	buffer.WriteString("]")
+
+	fmt.Printf("- getQueryResultForQueryString queryResult:\n%s\n", buffer.String())
+
+	return buffer.Bytes(), nil
+}
+*/
+
+// ===============================================
+// createIndex - create search index for ledger
+// ===============================================
+func createIndex(stub shim.ChaincodeStubInterface, indexName string, attributes []string) error {
+	fmt.Println("- start create index")
+	var err error
+	//  ==== Index the object to enable range queries, e.g. return all parts made by supplier b ====
+	//  An 'index' is a normal key/value entry in state.
+	//  The key is a composite key, with the elements that you want to range query on listed first.
+	//  This will enable very efficient state range queries based on composite keys matching indexName~color~*
+	indexKey, err := stub.CreateCompositeKey(indexName, attributes)
+	if err != nil {
+		return err
+	}
+	//  Save index entry to state. Only the key name is needed, no need to store a duplicate copy of object.
+	//  Note - passing a 'nil' value will effectively delete the key from state, therefore we pass null character as value
+	value := []byte{0x00}
+	stub.PutState(indexKey, value)
+
+	fmt.Println("- end create index")
+	return nil
+}
+
+func deleteIndex(stub shim.ChaincodeStubInterface, indexName string, attributes []string) error {
+	fmt.Println("- start delete index")
+	var err error
+	//  ==== Index the object to enable range queries, e.g. return all parts made by supplier b ====
+	//  An 'index' is a normal key/value entry in state.
+	//  The key is a composite key, with the elements that you want to range query on listed first.
+	//  This will enable very efficient state range queries based on composite keys matching indexName~color~*
+	indexKey, err := stub.CreateCompositeKey(indexName, attributes)
+	if err != nil {
+		return err
+	}
+	//  Delete index by key
+	stub.DelState(indexKey)
+
+	fmt.Println("- end delete index")
+	return nil
+}
 
 var enterpriseNameList = []string{"bank", "telecom", "shopping_mall"}
 

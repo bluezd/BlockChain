@@ -28,6 +28,11 @@ type Certificate struct {
 	Score             string `json: Score`
 }
 
+var CerfificationQueryMap = map[string]string {
+	"ParterName": "partnername~all",
+	"CertificateName": "certificate~all",
+}
+
 func main() {
 	err := shim.Start(new(SmartContract))
 	if err != nil {
@@ -57,8 +62,8 @@ func (s *SmartContract) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 		return s.removeCertificate(stub, args)
 	} else if function == "updateCertificate" {
 		return s.updateCertificate(stub, args)
-	} else if function == "queryCertificateBasedOnParterName" {
-		return s.queryCertificateBasedOnParterName(stub, args)
+	} else if function == "queryCertificateBasedOnName" {
+		return s.queryCertificateBasedOnName(stub, args)
 	}
 
 	return shim.Error("Invalid Smart Contract function name." + function)
@@ -118,15 +123,14 @@ func (s *SmartContract) createCertificate(stub shim.ChaincodeStubInterface, args
 	}
 
 	// create index
-	indexName := "partnername~all"
-	err = createIndex(stub, indexName, []string{certificate.PartnerName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.CertificateName, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
+	err = createIndexHelper(stub, &certificate)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
 
 	return shim.Success(nil)
-
 }
+
 func (s *SmartContract) removeCertificate(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 
 	if len(args) != 1 {
@@ -150,15 +154,14 @@ func (s *SmartContract) removeCertificate(stub shim.ChaincodeStubInterface, args
 	}
 
 	// delete index
-	indexName := "partnername~all"
-	err = deleteIndex(stub, indexName, []string{certificate.PartnerName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.CertificateName, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
+	err = deleteIndexHelper(stub, certificate)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
 
 	return shim.Success(nil)
-
 }
+
 func (s *SmartContract) updateCertificate(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 
 	if len(args) != 12 {
@@ -173,8 +176,7 @@ func (s *SmartContract) updateCertificate(stub shim.ChaincodeStubInterface, args
 	certificate := Certificate{}
 	json.Unmarshal(certificateAsBytes, &certificate)
 	// delete index
-	indexName := "partnername~all"
-	err := deleteIndex(stub, indexName, []string{certificate.PartnerName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.CertificateName, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
+	err := deleteIndexHelper(stub, &certificate)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -198,13 +200,12 @@ func (s *SmartContract) updateCertificate(stub shim.ChaincodeStubInterface, args
 	}
 
 	// create index
-	err = createIndex(stub, indexName, []string{certificate.PartnerName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.CertificateName, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
+	err = createIndexHelper(stub, &certificate)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
 
 	return shim.Success(nil)
-
 }
 
 func (t *SmartContract) getHistoryForRecord(stub shim.ChaincodeStubInterface, args []string) pb.Response {
@@ -271,14 +272,19 @@ func (t *SmartContract) getHistoryForRecord(stub shim.ChaincodeStubInterface, ar
 	return shim.Success(buffer.Bytes())
 }
 
-func (s *SmartContract) queryCertificateBasedOnParterName(stub shim.ChaincodeStubInterface, args []string) pb.Response {
-	if len(args) != 1 {
-		return shim.Error("Incorrect number of arguments. Expecting 1")
+func (s *SmartContract) queryCertificateBasedOnName(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	if len(args) != 2 {
+		return shim.Error("Incorrect number of arguments. Expecting 2")
 	}
-	partnerName := args[0]
-	fmt.Println("- start  queryCertificateBasedOnParterName", partnerName)
+	queryName := args[1]
+	fmt.Println("- start  queryCertificateBasedOnName", queryName)
+	_, ok := CerfificationQueryMap[args[0]]
+	if !ok {
+		fmt.Println("!! Incorrect Query Option [ParterName, CertificateName] !!")
+		return shim.Error("Incorrect Query Option [ParterName, CertificateName]")
+	}
 
-	certificateResultsIterator, err := stub.GetStateByPartialCompositeKey("partnername~all", []string{partnerName})
+	certificateResultsIterator, err := stub.GetStateByPartialCompositeKey(CerfificationQueryMap[args[0]], []string{queryName})
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -302,90 +308,123 @@ func (s *SmartContract) queryCertificateBasedOnParterName(stub shim.ChaincodeStu
 		if bArrayMemberAlreadyWritten == true {
 			buffer.WriteString(",")
 		}
-		returnedPartnerName := compositeKeyParts[0]
-		returnedCertificateHash := compositeKeyParts[1]
-		returnedContacts := compositeKeyParts[2]
-		returnedMobile := compositeKeyParts[3]
-		returnedEmail := compositeKeyParts[4]
-		returnedCertificateType := compositeKeyParts[5]
-		returnedCertificateName := compositeKeyParts[6]
-		returnedPassingDate := compositeKeyParts[7]
-		returnedExpiryDate := compositeKeyParts[8]
-		returnedCertificateStatus := compositeKeyParts[9]
-		returnedParticipant := compositeKeyParts[10]
-		returnedScore := compositeKeyParts[11]
-		fmt.Printf("- found a certificate record from index:%s partnerName:%s certificateHash:%s contacts:%s mobile:%s email:%s certificateType:%s certificateName:%s passingDate:%s expiryDate:%s certificateStatus:%s participant:%s score:%s\n",
-			objectType, returnedPartnerName, returnedCertificateHash,
-			returnedContacts, returnedMobile, returnedEmail, returnedCertificateType,
-			returnedCertificateName, returnedPassingDate, returnedExpiryDate,
-			returnedCertificateStatus, returnedParticipant, returnedScore)
-		buffer.WriteString("{\"PartnerName\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(returnedPartnerName)
-		buffer.WriteString("\"")
+		//returnedPartnerName := compositeKeyParts[0]
+		//returnedCertificateHash := compositeKeyParts[1]
+		//returnedContacts := compositeKeyParts[2]
+		//returnedMobile := compositeKeyParts[3]
+		//returnedEmail := compositeKeyParts[4]
+		//returnedCertificateType := compositeKeyParts[5]
+		//returnedCertificateName := compositeKeyParts[6]
+		//returnedPassingDate := compositeKeyParts[7]
+		//returnedExpiryDate := compositeKeyParts[8]
+		//returnedCertificateStatus := compositeKeyParts[9]
+		//returnedParticipant := compositeKeyParts[10]
+		//returnedScore := compositeKeyParts[11]
+		if args[0] == "ParterName" {
+			fmt.Printf("- found a certificate record from index:%s partnerName:%s certificateName:%s certificateHash:%s contacts:%s mobile:%s email:%s certificateType:%s passingDate:%s expiryDate:%s certificateStatus:%s participant:%s score:%s\n",
+				objectType, compositeKeyParts[0], compositeKeyParts[1],
+				compositeKeyParts[2], compositeKeyParts[3], compositeKeyParts[4], compositeKeyParts[5],
+				compositeKeyParts[6], compositeKeyParts[7], compositeKeyParts[8],
+				compositeKeyParts[9], compositeKeyParts[10], compositeKeyParts[11])
+			buffer.WriteString("{\"PartnerName\":")
+			buffer.WriteString("\"")
+			buffer.WriteString(compositeKeyParts[0])
+			buffer.WriteString("\"")
+
+			buffer.WriteString("{\"CertificateName\":")
+			buffer.WriteString("\"")
+			buffer.WriteString(compositeKeyParts[1])
+			buffer.WriteString("\"")
+
+		} else if args[0] == "CertificateName" {
+			fmt.Printf("- found a certificate record from index:%s certificateName:%s partnerName:%s certificateHash:%s contacts:%s mobile:%s email:%s certificateType:%s passingDate:%s expiryDate:%s certificateStatus:%s participant:%s score:%s\n",
+				objectType, compositeKeyParts[0], compositeKeyParts[1],
+				compositeKeyParts[2], compositeKeyParts[3], compositeKeyParts[4], compositeKeyParts[5],
+				compositeKeyParts[6], compositeKeyParts[7], compositeKeyParts[8],
+				compositeKeyParts[9], compositeKeyParts[10], compositeKeyParts[11])
+
+			buffer.WriteString("{\"CertificateName\":")
+			buffer.WriteString("\"")
+			buffer.WriteString(compositeKeyParts[0])
+			buffer.WriteString("\"")
+
+			buffer.WriteString("{\"PartnerName\":")
+			buffer.WriteString("\"")
+			buffer.WriteString(compositeKeyParts[1])
+			buffer.WriteString("\"")
+		}
 
 		buffer.WriteString(", \"CertificateHash\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedCertificateHash)
+		buffer.WriteString(compositeKeyParts[2])
 		buffer.WriteString("\"")
 
 		buffer.WriteString(", \"Contacts\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedContacts)
+		buffer.WriteString(compositeKeyParts[3])
 		buffer.WriteString("\"")
 
 		buffer.WriteString(", \"Mobile\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedMobile)
+		buffer.WriteString(compositeKeyParts[4])
 		buffer.WriteString("\"")
 		buffer.WriteString("}")
 
 		buffer.WriteString(", \"Email\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedEmail)
+		buffer.WriteString(compositeKeyParts[5])
 		buffer.WriteString("\"")
 
 		buffer.WriteString(", \"CertificateType\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedCertificateType)
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"CertificateName\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(returnedCertificateName)
+		buffer.WriteString(compositeKeyParts[6])
 		buffer.WriteString("\"")
 
 		buffer.WriteString(", \"PassingDate\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedPassingDate)
+		buffer.WriteString(compositeKeyParts[7])
 		buffer.WriteString("\"")
 
 		buffer.WriteString(", \"ExpiryDate\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedExpiryDate)
+		buffer.WriteString(compositeKeyParts[8])
 		buffer.WriteString("\"")
 
 		buffer.WriteString(", \"CertificateStatus\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedCertificateStatus)
+		buffer.WriteString(compositeKeyParts[9])
 		buffer.WriteString("\"")
 
 		buffer.WriteString(", \"Participant\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedParticipant)
+		buffer.WriteString(compositeKeyParts[10])
 		buffer.WriteString("\"")
 
 		buffer.WriteString(", \"Score\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(returnedScore)
+		buffer.WriteString(compositeKeyParts[11])
 		buffer.WriteString("\"")
 
 		bArrayMemberAlreadyWritten = true
 	}
 	buffer.WriteString("]")
 
-	fmt.Printf("-  queryCertificateBasedOnParterName returning:\n   %s\n", buffer.String())
+	fmt.Printf("-  queryCertificateBasedOnName returning:\n   %s\n", buffer.String())
 	return shim.Success(buffer.Bytes())
+}
+
+func createIndexHelper(stub shim.ChaincodeStubInterface, certificate *Certificate) error {
+	var err error = nil
+
+	for queryKey, indexName := range CerfificationQueryMap {
+		if queryKey == "ParterName" {
+			err = createIndex(stub, indexName, []string{certificate.PartnerName, certificate.CertificateName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
+		} else if queryKey == "CertificateName" {
+			err = createIndex(stub, indexName, []string{certificate.CertificateName, certificate.PartnerName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
+		}
+	}
+
+	return err
 }
 
 // ===============================================
@@ -405,6 +444,20 @@ func createIndex(stub shim.ChaincodeStubInterface, indexName string, attributes 
 
 	fmt.Println("- end create index")
 	return nil
+}
+
+func deleteIndexHelper(stub shim.ChaincodeStubInterface, certificate *Certificate) error {
+	var err error = nil
+
+	for queryKey, indexName := range CerfificationQueryMap {
+		if queryKey == "ParterName" {
+			err = deleteIndex(stub, indexName, []string{certificate.PartnerName, certificate.CertificateName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
+		} else if queryKey == "CertificateName" {
+			err = deleteIndex(stub, indexName, []string{certificate.CertificateName, certificate.PartnerName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
+		}
+	}
+
+	return err
 }
 
 func deleteIndex(stub shim.ChaincodeStubInterface, indexName string, attributes []string) error {

@@ -28,8 +28,8 @@ type Certificate struct {
 	Score             string `json: Score`
 }
 
-var CerfificationQueryMap = map[string]string {
-	"ParterName": "partnername~all",
+var CerfificationQueryMap = map[string]string{
+	"PartnerName":     "partnername~all",
 	"CertificateName": "certificate~all",
 }
 
@@ -280,8 +280,8 @@ func (s *SmartContract) queryCertificateBasedOnName(stub shim.ChaincodeStubInter
 	fmt.Println("- start  queryCertificateBasedOnName", queryName)
 	_, ok := CerfificationQueryMap[args[0]]
 	if !ok {
-		fmt.Println("!! Incorrect Query Option [ParterName, CertificateName] !!")
-		return shim.Error("Incorrect Query Option [ParterName, CertificateName]")
+		fmt.Println("!! Incorrect Query Option [PartnerName, CertificateName] !!")
+		return shim.Error("Incorrect Query Option [PartnerName, CertificateName]")
 	}
 
 	certificateResultsIterator, err := stub.GetStateByPartialCompositeKey(CerfificationQueryMap[args[0]], []string{queryName})
@@ -320,7 +320,7 @@ func (s *SmartContract) queryCertificateBasedOnName(stub shim.ChaincodeStubInter
 		//returnedCertificateStatus := compositeKeyParts[9]
 		//returnedParticipant := compositeKeyParts[10]
 		//returnedScore := compositeKeyParts[11]
-		if args[0] == "ParterName" {
+		if args[0] == "PartnerName" {
 			fmt.Printf("- found a certificate record from index:%s partnerName:%s certificateName:%s certificateHash:%s contacts:%s mobile:%s email:%s certificateType:%s passingDate:%s expiryDate:%s certificateStatus:%s participant:%s score:%s\n",
 				objectType, compositeKeyParts[0], compositeKeyParts[1],
 				compositeKeyParts[2], compositeKeyParts[3], compositeKeyParts[4], compositeKeyParts[5],
@@ -417,7 +417,7 @@ func createIndexHelper(stub shim.ChaincodeStubInterface, certificate *Certificat
 	var err error = nil
 
 	for queryKey, indexName := range CerfificationQueryMap {
-		if queryKey == "ParterName" {
+		if queryKey == "PartnerName" {
 			err = createIndex(stub, indexName, []string{certificate.PartnerName, certificate.CertificateName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
 		} else if queryKey == "CertificateName" {
 			err = createIndex(stub, indexName, []string{certificate.CertificateName, certificate.PartnerName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
@@ -450,7 +450,7 @@ func deleteIndexHelper(stub shim.ChaincodeStubInterface, certificate *Certificat
 	var err error = nil
 
 	for queryKey, indexName := range CerfificationQueryMap {
-		if queryKey == "ParterName" {
+		if queryKey == "PartnerName" {
 			err = deleteIndex(stub, indexName, []string{certificate.PartnerName, certificate.CertificateName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})
 		} else if queryKey == "CertificateName" {
 			err = deleteIndex(stub, indexName, []string{certificate.CertificateName, certificate.PartnerName, certificate.CertificateHash, certificate.Contacts, certificate.Mobile, certificate.Email, certificate.CertificateType, certificate.PassingDate, certificate.ExpiryDate, certificate.CertificateStatus, certificate.Participant, certificate.Score})

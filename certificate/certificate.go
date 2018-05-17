@@ -454,9 +454,9 @@ func (s *SmartContract) queryCertificateBasedOnName(stub shim.ChaincodeStubInter
 		buffer.WriteString("\"")
 
 		buffer.WriteString(", \"Record\":")
-		buffer.WriteString("\"")
+		//buffer.WriteString("\"")
 		buffer.WriteString(buffer1.String())
-		buffer.WriteString("\"")
+		//buffer.WriteString("\"")
 		buffer.WriteString("}")
 
 		bArrayMemberAlreadyWritten = true

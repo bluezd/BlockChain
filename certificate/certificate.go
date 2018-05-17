@@ -64,6 +64,8 @@ func (s *SmartContract) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 		return s.updateCertificate(stub, args)
 	} else if function == "queryCertificateBasedOnName" {
 		return s.queryCertificateBasedOnName(stub, args)
+	} else if function == "queryAllCertificate" {
+		return s.queryAllCertificate(stub, args)
 	}
 
 	return shim.Error("Invalid Smart Contract function name." + function)
@@ -272,6 +274,49 @@ func (t *SmartContract) getHistoryForRecord(stub shim.ChaincodeStubInterface, ar
 	return shim.Success(buffer.Bytes())
 }
 
+func (s *SmartContract) queryAllCertificate(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
+	startKey := ""
+	endKey := ""
+
+	resultsIterator, err := stub.GetStateByRange(startKey, endKey)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	defer resultsIterator.Close()
+
+	// buffer is a JSON array containing QueryResults
+	var buffer bytes.Buffer
+
+	buffer.WriteString("[")
+	bArrayMemberAlreadyWritten := false
+	for resultsIterator.HasNext() {
+		queryResponse, err := resultsIterator.Next()
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+
+		// Add a comma before array members, suppress it for the first array member
+		if bArrayMemberAlreadyWritten == true {
+			buffer.WriteString(",")
+		}
+		buffer.WriteString("{\"Key\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(queryResponse.Key)
+		buffer.WriteString("\"")
+		buffer.WriteString(", \"Record\":")
+
+		// Record is a JSON object, so we write as-is
+		buffer.WriteString(string(queryResponse.Value))
+		buffer.WriteString("}")
+		bArrayMemberAlreadyWritten = true
+	}
+
+	buffer.WriteString("]")
+	fmt.Printf("- queryAllCertificates:\n%s\n", buffer.String())
+	return shim.Success(buffer.Bytes())
+}
+
 func (s *SmartContract) queryCertificateBasedOnName(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	if len(args) != 2 {
 		return shim.Error("Incorrect number of arguments. Expecting 2")
@@ -291,11 +336,13 @@ func (s *SmartContract) queryCertificateBasedOnName(stub shim.ChaincodeStubInter
 	defer certificateResultsIterator.Close()
 
 	var buffer bytes.Buffer
+	var buffer1 bytes.Buffer
 	buffer.WriteString("[")
 
 	bArrayMemberAlreadyWritten := false
 	var i int
 	for i = 0; certificateResultsIterator.HasNext(); i++ {
+		buffer1.Reset()
 		responseRange, err := certificateResultsIterator.Next()
 		if err != nil {
 			return shim.Error(err.Error())
@@ -308,102 +355,109 @@ func (s *SmartContract) queryCertificateBasedOnName(stub shim.ChaincodeStubInter
 		if bArrayMemberAlreadyWritten == true {
 			buffer.WriteString(",")
 		}
-		//returnedPartnerName := compositeKeyParts[0]
-		//returnedCertificateHash := compositeKeyParts[1]
-		//returnedContacts := compositeKeyParts[2]
-		//returnedMobile := compositeKeyParts[3]
-		//returnedEmail := compositeKeyParts[4]
-		//returnedCertificateType := compositeKeyParts[5]
-		//returnedCertificateName := compositeKeyParts[6]
-		//returnedPassingDate := compositeKeyParts[7]
-		//returnedExpiryDate := compositeKeyParts[8]
-		//returnedCertificateStatus := compositeKeyParts[9]
-		//returnedParticipant := compositeKeyParts[10]
-		//returnedScore := compositeKeyParts[11]
+
+		var returnedPartnerName, returnedCertificateName string
 		if args[0] == "PartnerName" {
+			returnedPartnerName = compositeKeyParts[0]
+			//returnedCertificateHash := compositeKeyParts[2]
+			//returnedContacts := compositeKeyParts[3]
+			//returnedMobile := compositeKeyParts[4]
+			//returnedEmail := compositeKeyParts[5]
+			//returnedCertificateType := compositeKeyParts[6]
+			returnedCertificateName = compositeKeyParts[1]
+			//returnedPassingDate := compositeKeyParts[7]
+			//returnedExpiryDate := compositeKeyParts[8]
+			//returnedCertificateStatus := compositeKeyParts[9]
+			//returnedParticipant := compositeKeyParts[10]
+			//returnedScore := compositeKeyParts[11]
+
 			fmt.Printf("- found a certificate record from index:%s partnerName:%s certificateName:%s certificateHash:%s contacts:%s mobile:%s email:%s certificateType:%s passingDate:%s expiryDate:%s certificateStatus:%s participant:%s score:%s\n",
 				objectType, compositeKeyParts[0], compositeKeyParts[1],
 				compositeKeyParts[2], compositeKeyParts[3], compositeKeyParts[4], compositeKeyParts[5],
 				compositeKeyParts[6], compositeKeyParts[7], compositeKeyParts[8],
 				compositeKeyParts[9], compositeKeyParts[10], compositeKeyParts[11])
-			buffer.WriteString("{\"PartnerName\":")
-			buffer.WriteString("\"")
-			buffer.WriteString(compositeKeyParts[0])
-			buffer.WriteString("\"")
-
-			buffer.WriteString("{\"CertificateName\":")
-			buffer.WriteString("\"")
-			buffer.WriteString(compositeKeyParts[1])
-			buffer.WriteString("\"")
-
 		} else if args[0] == "CertificateName" {
+			returnedPartnerName = compositeKeyParts[1]
+			returnedCertificateName = compositeKeyParts[0]
+
 			fmt.Printf("- found a certificate record from index:%s certificateName:%s partnerName:%s certificateHash:%s contacts:%s mobile:%s email:%s certificateType:%s passingDate:%s expiryDate:%s certificateStatus:%s participant:%s score:%s\n",
 				objectType, compositeKeyParts[0], compositeKeyParts[1],
 				compositeKeyParts[2], compositeKeyParts[3], compositeKeyParts[4], compositeKeyParts[5],
 				compositeKeyParts[6], compositeKeyParts[7], compositeKeyParts[8],
 				compositeKeyParts[9], compositeKeyParts[10], compositeKeyParts[11])
-
-			buffer.WriteString("{\"CertificateName\":")
-			buffer.WriteString("\"")
-			buffer.WriteString(compositeKeyParts[0])
-			buffer.WriteString("\"")
-
-			buffer.WriteString("{\"PartnerName\":")
-			buffer.WriteString("\"")
-			buffer.WriteString(compositeKeyParts[1])
-			buffer.WriteString("\"")
 		}
 
-		buffer.WriteString(", \"CertificateHash\":")
+		buffer1.WriteString("{\"CertificateHash\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[2])
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"PartnerName\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(returnedPartnerName)
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"Contacts\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[3])
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"Mobile\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[4])
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"Email\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[5])
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"CertificateType\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[6])
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"CertificateName\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(returnedCertificateName)
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"PassingDate\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[7])
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"ExpiryDate\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[8])
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"CertificateStatus\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[9])
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"Participant\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[10])
+		buffer1.WriteString("\"")
+
+		buffer1.WriteString(", \"Score\":")
+		buffer1.WriteString("\"")
+		buffer1.WriteString(compositeKeyParts[11])
+		buffer1.WriteString("\"")
+		buffer1.WriteString("}")
+
+		buffer.WriteString("{\"Key\":")
 		buffer.WriteString("\"")
 		buffer.WriteString(compositeKeyParts[2])
 		buffer.WriteString("\"")
 
-		buffer.WriteString(", \"Contacts\":")
+		buffer.WriteString(", \"Record\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(compositeKeyParts[3])
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"Mobile\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(compositeKeyParts[4])
+		buffer.WriteString(buffer1.String())
 		buffer.WriteString("\"")
 		buffer.WriteString("}")
-
-		buffer.WriteString(", \"Email\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(compositeKeyParts[5])
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"CertificateType\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(compositeKeyParts[6])
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"PassingDate\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(compositeKeyParts[7])
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"ExpiryDate\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(compositeKeyParts[8])
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"CertificateStatus\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(compositeKeyParts[9])
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"Participant\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(compositeKeyParts[10])
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"Score\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(compositeKeyParts[11])
-		buffer.WriteString("\"")
 
 		bArrayMemberAlreadyWritten = true
 	}

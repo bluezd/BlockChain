@@ -104,7 +104,6 @@ func (t *MarathonChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 
 func addMatchInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	var err error
-	var userID int
 
 	if len(args) != 4 {
 		return shim.Error("!! Incorrect number of arguments, Expecting 4 !!")
@@ -149,7 +148,6 @@ func addMatchInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 
 func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	var err error
-	var userID int
 
 	if len(args) != 6 {
 		return shim.Error("!! Incorrect number of arguments, Expecting 6 !!")
@@ -173,7 +171,7 @@ func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb
 
 	matchEnrollScoreRecord := &MatchEnrollScoreInfo{
 		User_Enter_Id: args[0],
-		User_Id:       args[1],
+		User_ID:       args[1],
 		Match_ID:      args[2],
 		Status:        args[3],
 		Match_Result:  args[4],
@@ -191,7 +189,7 @@ func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb
 	}
 
 	indexName := "match~all"
-	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_Id, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score}); err != nil {
+	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score}); err != nil {
 		return shim.Error(err.Error())
 	}
 
@@ -282,7 +280,7 @@ func updateMatchInfo(stub shim.ChaincodeStubInterface, args []string) pb.Respons
 	matchInfoRecord.Status = args[2]
 	matchInfoRecord.Match_Date = args[3]
 
-	matchInfoRecordJSONBytes, err := json.Marshal(matchEnrollScoreRecord)
+	matchInfoRecordJSONBytes, err := json.Marshal(matchInfoRecord)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -347,7 +345,7 @@ func updateMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string)
 	}
 
 	indexName := "match~all"
-	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_Id, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score}); err != nil {
+	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score}); err != nil {
 		return shim.Error(err.Error())
 	}
 

@@ -100,9 +100,6 @@ func (t *MarathonChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 	return shim.Error("Received unknown function invocation")
 }
 
-// ============================================================
-// CreateCertificate
-// ============================================================
 func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	var err error
 	var userID int
@@ -118,7 +115,7 @@ func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	}
 
 	currentTime := timeHelper()
-	fmt.Printf("[%s] <add> Participant  %d", currentTime, User_Id)
+	fmt.Printf("[%s] <add> Participant  %d", currentTime, userID)
 
 	// construct the key
 	key := args[0]
@@ -126,19 +123,21 @@ func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	// Check the Record in State
 	ParticipantInfoAsBytes, err := stub.GetState(key)
 	if err != nil {
-		return shim.Error("Failed to get certificate record: " + err.Error())
+		return shim.Error("Failed to get participant record: " + err.Error())
 	} else if ParticipantInfoAsBytes != nil {
 		return shim.Error("Participant record already exists: " + key)
 	}
 
 	participantRecord := &ParticipantInfo{
-		User_ID:         args[0],
+		User_Id:         args[0],
 		User_Name:       args[1],
 		Birthday:        args[2],
 		National_Id:     args[3],
 		Passport_Number: args[4],
 		Mobile:          args[5],
 	}
+
+	var ParticipantInfoRecordAsBytes []byte
 	if ParticipantInfoRecordAsBytes, err = json.Marshal(participantRecord); err != nil {
 		return shim.Error(err.Error())
 	}
@@ -168,7 +167,7 @@ func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.R
 	ParticipantInfoAsBytes, err := stub.GetState(key)
 	if err != nil {
 		return shim.Error("Failed to get participant record: " + err.Error())
-	} else if certificateRecordAsBytes == nil {
+	} else if ParticipantInfoAsBytes == nil {
 		return shim.Error("Participant record does not exists: " + key)
 	}
 
@@ -208,9 +207,7 @@ func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.R
 
 func getParticipantPointBytes(ParticipantInfoRecordAsBytes []byte) []byte {
 	participantRecord := &ParticipantInfo{}
-	if err = json.Unmarshal(ParticipantInfoRecordAsBytes, participantRecord); err != nil {
-		return shim.Error(err.Error())
-	}
+	_ = json.Unmarshal(ParticipantInfoRecordAsBytes, participantRecord)
 
 	participantPointRecord := struct {
 		User_Id string `json:"user_id"`
@@ -220,15 +217,12 @@ func getParticipantPointBytes(ParticipantInfoRecordAsBytes []byte) []byte {
 		Point:   participantRecord.Point,
 	}
 
-	participantPointRecordJSONBytes, err := json.Marshal(participantPointRecord)
-	if err != nil {
-		return shim.Error(err.Error())
-	}
+	participantPointRecordJSONBytes, _ := json.Marshal(participantPointRecord)
 
 	return participantPointRecordJSONBytes
 }
 
-func queryParticipantInfo(stub shim.ChaincodeStubInterface, args []string, pointQuery bool) []byte {
+func queryParticipantInfo(stub shim.ChaincodeStubInterface, args []string, pointQuery bool) pb.Response {
 	var err error
 
 	fmt.Printf("- start queryParticipantInfo: %s\n", args[0])

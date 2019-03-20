@@ -37,7 +37,7 @@ type ParticipantInfo struct {
 	National_Id     string `json:"national_id"`
 	Passport_Number string `json:"passport_number"`
 	Mobile          string `json:"mobile"`
-	Point           string `json:"point"`
+	Point           string `json:"point_free"`
 }
 
 type MatchInfo struct {
@@ -47,7 +47,7 @@ type MatchInfo struct {
 	Match_Date string `json:"match_date"`
 }
 
-type MatchEnrollInfo struct {
+type MatchEnrollScoreInfo struct {
 	User_Enter_Id string `json:"user_enter_id"`
 	User_ID       string `json:"user_id"`
 	Match_ID      string `json:"match_id"`
@@ -55,16 +55,6 @@ type MatchEnrollInfo struct {
 	Match_Result  string `json:"match_result"`
 	Score         string `json:"score"`
 }
-
-/*
-type MatchScore struct {
-	User_Enter_Id string `json:"user_enter_id"`
-	User_ID       string `json:"user_id"`
-	Match_ID      string `json:"match_id"`
-	Match_Result  string `json:"match_result"`
-	Score         string `json:"score"`
-}
-*/
 
 type MarathonChaincode struct {
 }
@@ -94,10 +84,119 @@ func (t *MarathonChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		return queryHistoryParticipantInfo(stub, args, false)
 	} else if function == "queryHistoryParticipantPoint" {
 		return queryHistoryParticipantInfo(stub, args, true)
+	} else if function == "addMatchEnrollScoreInfo" {
+		return addMatchEnrollScoreInfo(stub, args)
+	} else if function == "updateMatchEnrollScoreInfo" {
+		return updateMatchEnrollScoreInfo(stub, args)
+	} else if function == "queryMatchEnrollScoreInfo" || function == "queryMatchInfo" {
+		return queryHelper(stub, args)
+	} else if function == "queryHistoryMatchEnrollScoreInfo" || function == "queryHistoryMatchInfo" {
+		return queryHistoryHelper(stub, args)
+	} else if function == "addMatchInfo" {
+		return addMatchInfo(stub, args)
+	} else if function == "updateMatchInfo" {
+		return updateMatchInfo(stub, args)
 	}
 
 	fmt.Printf("!! invalid function: %s !!", function)
 	return shim.Error("Received unknown function invocation")
+}
+
+func addMatchInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	var err error
+	var userID int
+
+	if len(args) != 4 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 4 !!")
+	}
+
+	// ==== Input Check ====
+	fmt.Println("- start addMatchInfo -")
+
+	// construct the key
+	key := args[0]
+
+	currentTime := timeHelper()
+	fmt.Printf("[%s] <add> MatchInfo  %s", currentTime, key)
+
+	ElementsAsBytes, err := stub.GetState(key)
+	if err != nil {
+		return shim.Error("Failed to get record: " + err.Error())
+	} else if ElementsAsBytes != nil {
+		return shim.Error("Match info record already exists: " + key)
+	}
+
+	matchInfoRecord := &MatchInfo{
+		Match_ID:   args[0],
+		Name:       args[1],
+		Status:     args[2],
+		Match_Date: args[3],
+	}
+
+	var matchInfoAsBytes []byte
+	if matchInfoAsBytes, err = json.Marshal(matchInfoRecord); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	// Add Record to State
+	if err = stub.PutState(key, matchInfoAsBytes); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	fmt.Println("- end addMatchInfo")
+	return shim.Success(nil)
+}
+
+func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	var err error
+	var userID int
+
+	if len(args) != 6 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 6 !!")
+	}
+
+	// ==== Input Check ====
+	fmt.Println("- start addMatchEnrollScoreInfo -")
+
+	// construct the key
+	key := args[0]
+
+	currentTime := timeHelper()
+	fmt.Printf("[%s] <add> MatchEnrollScoreInfo  %s", currentTime, key)
+
+	ElementsAsBytes, err := stub.GetState(key)
+	if err != nil {
+		return shim.Error("Failed to get record: " + err.Error())
+	} else if ElementsAsBytes != nil {
+		return shim.Error("Match record already exists: " + key)
+	}
+
+	matchEnrollScoreRecord := &MatchEnrollScoreInfo{
+		User_Enter_Id: args[0],
+		User_Id:       args[1],
+		Match_ID:      args[2],
+		Status:        args[3],
+		Match_Result:  args[4],
+		Score:         args[5],
+	}
+
+	var matchEnrollScoreInfoAsBytes []byte
+	if matchEnrollScoreInfoAsBytes, err = json.Marshal(matchEnrollScoreRecord); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	// Add Record to State
+	if err = stub.PutState(key, matchEnrollScoreInfoAsBytes); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	indexName := "match~all"
+	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_Id, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score}); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	fmt.Println("- end addMatchEnrollScoreInfo")
+	return shim.Success(nil)
 }
 
 func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
@@ -151,6 +250,111 @@ func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	return shim.Success(nil)
 }
 
+func updateMatchInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	var err error
+
+	// ==== Input Check ====
+	fmt.Println("- start updateMatchInfo -")
+	if len(args) != 4 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 4 !!")
+	}
+	if len(args[0]) <= 0 {
+		return shim.Error("1st argument user id must be a non-empty string")
+	}
+
+	// construct the key
+	key := args[0]
+
+	// Check the Record in State
+	ElementsAsBytes, err := stub.GetState(key)
+	if err != nil {
+		return shim.Error("Failed to get match info record: " + err.Error())
+	} else if ElementsAsBytes == nil {
+		return shim.Error("match info record does not exists: " + key)
+	}
+
+	matchInfoRecord := &MatchInfo{}
+	if err = json.Unmarshal(ElementsAsBytes, matchInfoRecord); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	matchInfoRecord.Name = args[1]
+	matchInfoRecord.Status = args[2]
+	matchInfoRecord.Match_Date = args[3]
+
+	matchInfoRecordJSONBytes, err := json.Marshal(matchEnrollScoreRecord)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	currentTime := timeHelper()
+	fmt.Printf("[%s] <update>  updateMatchInfo %s", currentTime, key)
+
+	// Add Record to State
+	if err = stub.PutState(key, matchInfoRecordJSONBytes); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	fmt.Println("- updateMatchInfo end ")
+	return shim.Success(nil)
+}
+
+func updateMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	var err error
+
+	// ==== Input Check ====
+	fmt.Println("- start updateMatchEnrollScoreInfo -")
+	if len(args) != 6 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 6 !!")
+	}
+	if len(args[0]) <= 0 {
+		return shim.Error("1st argument user id must be a non-empty string")
+	}
+
+	// construct the key
+	key := args[0]
+
+	// Check the Record in State
+	ElementsAsBytes, err := stub.GetState(key)
+	if err != nil {
+		return shim.Error("Failed to get match enroll record: " + err.Error())
+	} else if ElementsAsBytes == nil {
+		return shim.Error("match enroll record does not exists: " + key)
+	}
+
+	matchEnrollScoreRecord := &MatchEnrollScoreInfo{}
+	if err = json.Unmarshal(ElementsAsBytes, matchEnrollScoreRecord); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	matchEnrollScoreRecord.User_ID = args[1]
+	matchEnrollScoreRecord.Match_ID = args[2]
+	matchEnrollScoreRecord.Status = args[3]
+	matchEnrollScoreRecord.Match_Result = args[4]
+	matchEnrollScoreRecord.Score = args[5]
+
+	matchEnrollScoreRecordJSONBytes, err := json.Marshal(matchEnrollScoreRecord)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	currentTime := timeHelper()
+	fmt.Printf("[%s] <update> MatchEnrollScoreInfo %s", currentTime, key)
+
+	// Add Record to State
+	if err = stub.PutState(key, matchEnrollScoreRecordJSONBytes); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	indexName := "match~all"
+	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_Id, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score}); err != nil {
+		return shim.Error(err.Error())
+	}
+
+	fmt.Println("- end updateMatchEnrollScoreInfo")
+	return shim.Success(nil)
+}
+
 func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	var err error
 
@@ -183,7 +387,7 @@ func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.R
 		participantRecord.Passport_Number = args[4]
 		participantRecord.Mobile = args[5]
 	} else if len(args) == 2 {
-		participantRecord.Point = args[6]
+		participantRecord.Point = args[1]
 	} else {
 		return shim.Error("!! Incorrect number of arguments, Expecting 6 !!")
 	}
@@ -222,6 +426,32 @@ func getParticipantPointBytes(ParticipantInfoRecordAsBytes []byte) []byte {
 	return participantPointRecordJSONBytes
 }
 
+func queryHelper(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	var err error
+
+	fmt.Printf("- start queryHelper: %s\n", args[0])
+	if len(args) != 1 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 1 !!")
+	}
+
+	// construct the key
+	key := args[0]
+
+	queryInfoAsBytes, err := stub.GetState(key)
+	if err != nil {
+		jsonResp := "{\"Error\":\"Failed to get state for " + key + "\"}"
+		fmt.Println(jsonResp)
+		return shim.Error(jsonResp)
+	} else if queryInfoAsBytes == nil {
+		jsonResp := "{\"Error\":\" ID does not exist: " + key + "\"}"
+		fmt.Println(jsonResp)
+		return shim.Error(jsonResp)
+	}
+
+	fmt.Println("- end queryHelper")
+	return shim.Success(queryInfoAsBytes)
+}
+
 func queryParticipantInfo(stub shim.ChaincodeStubInterface, args []string, pointQuery bool) pb.Response {
 	var err error
 
@@ -252,11 +482,77 @@ func queryParticipantInfo(stub shim.ChaincodeStubInterface, args []string, point
 	return shim.Success(ParticipantInfoRecordAsBytes)
 }
 
+func queryHistoryHelper(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+	var err error
+
+	if len(args) != 1 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 1 !!")
+	}
+
+	// construct the key
+	key := args[0]
+
+	fmt.Printf("- start queryHistoryHelper: %s\n", key)
+
+	resultsIterator, err := stub.GetHistoryForKey(key)
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	defer resultsIterator.Close()
+
+	var buffer bytes.Buffer
+	buffer.WriteString("[")
+
+	bArrayMemberAlreadyWritten := false
+	for resultsIterator.HasNext() {
+		response, err := resultsIterator.Next()
+		if err != nil {
+			return shim.Error(err.Error())
+		}
+
+		if bArrayMemberAlreadyWritten == true {
+			buffer.WriteString(",")
+		}
+		buffer.WriteString("{\"TxId\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(response.TxId)
+		buffer.WriteString("\"")
+
+		buffer.WriteString(", \"Value\":")
+		// if it was a delete operation on given key, then we need to set the
+		//corresponding value null. Else, we will write the response.Value
+		//as-is (as the Value itself a JSON Integral)
+		if response.IsDelete {
+			buffer.WriteString("null")
+		} else {
+			buffer.WriteString(string(response.Value))
+		}
+
+		buffer.WriteString(", \"Timestamp\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(time.Unix(response.Timestamp.Seconds, int64(response.Timestamp.Nanos)).String())
+		buffer.WriteString("\"")
+
+		buffer.WriteString(", \"IsDelete\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(strconv.FormatBool(response.IsDelete))
+		buffer.WriteString("\"")
+
+		buffer.WriteString("}")
+		bArrayMemberAlreadyWritten = true
+	}
+	buffer.WriteString("]")
+
+	fmt.Printf("- end queryHistoryHelper:\n   %s\n", buffer.String())
+
+	return shim.Success(buffer.Bytes())
+}
+
 func queryHistoryParticipantInfo(stub shim.ChaincodeStubInterface, args []string, pointQuery bool) pb.Response {
 	var err error
 
 	if len(args) != 1 {
-		return shim.Error("!! Incorrect number of arguments, Expecting 2 !!")
+		return shim.Error("!! Incorrect number of arguments, Expecting 1 !!")
 	}
 
 	// construct the key
@@ -327,6 +623,29 @@ func timeHelper() string {
 	t := time.Now()
 	currentTime := t.Format("2006-01-02T15:04:05")
 	return currentTime
+}
+
+// ===============================================
+// createIndex - create search index for ledger
+// ===============================================
+func createIndex(stub shim.ChaincodeStubInterface, indexName string, attributes []string) error {
+	fmt.Println("- start create index")
+	var err error
+	//  ==== Index the object to enable range queries, e.g. return all parts made by supplier b ====
+	//  An 'index' is a normal key/value entry in state.
+	//  The key is a composite key, with the elements that you want to range query on listed first.
+	//  This will enable very efficient state range queries based on composite keys matching indexName~color~*
+	indexKey, err := stub.CreateCompositeKey(indexName, attributes)
+	if err != nil {
+		return err
+	}
+	//  Save index entry to state. Only the key name is needed, no need to store a duplicate copy of object.
+	//  Note - passing a 'nil' value will effectively delete the key from state, therefore we pass null character as value
+	value := []byte{0x00}
+	stub.PutState(indexKey, value)
+
+	fmt.Println("- end create index")
+	return nil
 }
 
 // ===================================================================================

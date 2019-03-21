@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hyperledger/fabric/core/chaincode/shim"
@@ -76,22 +77,20 @@ func (t *MarathonChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		return addParticipantInfo(stub, args)
 	} else if function == "updateParticipantInfo" || function == "updateParticipantPoint" {
 		return updateParticipantInfo(stub, args)
-	} else if function == "queryParticipantInfo" {
-		return queryParticipantInfo(stub, args, false)
 	} else if function == "queryParticipantPoint" {
-		return queryParticipantInfo(stub, args, true)
-	} else if function == "queryHistoryParticipantInfo" {
-		return queryHistoryParticipantInfo(stub, args, false)
-	} else if function == "queryHistoryParticipantPoint" {
-		return queryHistoryParticipantInfo(stub, args, true)
+		return queryParticipantPoint(stub, args)
 	} else if function == "addMatchEnrollScoreInfo" {
 		return addMatchEnrollScoreInfo(stub, args)
 	} else if function == "updateMatchEnrollScoreInfo" {
 		return updateMatchEnrollScoreInfo(stub, args)
-	} else if function == "queryMatchEnrollScoreInfo" || function == "queryMatchInfo" {
+	} else if function == "queryParticipantInfo" || function == "queryMatchEnrollScoreInfo" ||
+		function == "queryMatchInfo" {
 		return queryHelper(stub, args)
-	} else if function == "queryHistoryMatchEnrollScoreInfo" || function == "queryHistoryMatchInfo" {
+	} else if function == "queryHistoryParticipantInfo" || function == "queryHistoryMatchEnrollScoreInfo" ||
+		function == "queryHistoryMatchInfo" {
 		return queryHistoryHelper(stub, args)
+	} else if function == "queryMatchInfoBasedOnUser" {
+		queryMatchInfoBasedOnUser(stub, args)
 	} else if function == "addMatchInfo" {
 		return addMatchInfo(stub, args)
 	} else if function == "updateMatchInfo" {
@@ -189,7 +188,7 @@ func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb
 	}
 
 	indexName := "match~all"
-	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score}); err != nil {
+	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score, matchEnrollScoreRecord.User_Enter_Id}); err != nil {
 		return shim.Error(err.Error())
 	}
 
@@ -345,7 +344,7 @@ func updateMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string)
 	}
 
 	indexName := "match~all"
-	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score}); err != nil {
+	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score, matchEnrollScoreRecord.User_Enter_Id}); err != nil {
 		return shim.Error(err.Error())
 	}
 
@@ -450,10 +449,10 @@ func queryHelper(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	return shim.Success(queryInfoAsBytes)
 }
 
-func queryParticipantInfo(stub shim.ChaincodeStubInterface, args []string, pointQuery bool) pb.Response {
+func queryParticipantPoint(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	var err error
 
-	fmt.Printf("- start queryParticipantInfo: %s\n", args[0])
+	fmt.Printf("- start queryParticipantPoint: %s\n", args[0])
 	if len(args) != 1 {
 		return shim.Error("!! Incorrect number of arguments, Expecting 1 !!")
 	}
@@ -472,11 +471,9 @@ func queryParticipantInfo(stub shim.ChaincodeStubInterface, args []string, point
 		return shim.Error(jsonResp)
 	}
 
-	if pointQuery {
-		ParticipantInfoRecordAsBytes = getParticipantPointBytes(ParticipantInfoRecordAsBytes)
-	}
+	ParticipantInfoRecordAsBytes = getParticipantPointBytes(ParticipantInfoRecordAsBytes)
 
-	fmt.Println("- end queryParticipantInfo")
+	fmt.Println("- end queryParticipantPoint")
 	return shim.Success(ParticipantInfoRecordAsBytes)
 }
 
@@ -546,65 +543,70 @@ func queryHistoryHelper(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	return shim.Success(buffer.Bytes())
 }
 
-func queryHistoryParticipantInfo(stub shim.ChaincodeStubInterface, args []string, pointQuery bool) pb.Response {
-	var err error
-
+func queryMatchInfoBasedOnUser(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	if len(args) != 1 {
-		return shim.Error("!! Incorrect number of arguments, Expecting 1 !!")
+		return shim.Error("Incorrect number of arguments. Expecting 1")
 	}
+	userID := strings.ToLower(args[0])
+	fmt.Println("- start queryMatchInfoBasedOnUser ", userID)
 
-	// construct the key
-	key := args[0]
-
-	fmt.Printf("- start queryHistoryParticipantInfo: %s\n", key)
-
-	resultsIterator, err := stub.GetHistoryForKey(key)
+	// Query the username~all index by color
+	// This will execute a key range query on all keys starting with 'userName'
+	ResultsIterator, err := stub.GetStateByPartialCompositeKey("match~all", []string{userID})
 	if err != nil {
 		return shim.Error(err.Error())
 	}
-	defer resultsIterator.Close()
+	defer ResultsIterator.Close()
 
 	var buffer bytes.Buffer
 	buffer.WriteString("[")
 
 	bArrayMemberAlreadyWritten := false
-	for resultsIterator.HasNext() {
-		response, err := resultsIterator.Next()
+	var i int
+	for i = 0; ResultsIterator.HasNext(); i++ {
+		// Note that we don't get the value (2nd return variable), we'll just get the marble name from the composite key
+		responseRange, err := ResultsIterator.Next()
 		if err != nil {
 			return shim.Error(err.Error())
 		}
 
+		objectType, compositeKeyParts, err := stub.SplitCompositeKey(responseRange.Key)
+		if err != nil {
+			return shim.Error(err.Error())
+		}
 		if bArrayMemberAlreadyWritten == true {
 			buffer.WriteString(",")
 		}
-		buffer.WriteString("{\"TxId\":")
+		returnedUserID := compositeKeyParts[0]
+		returnedMatchID := compositeKeyParts[1]
+		returnedMatchResult := compositeKeyParts[2]
+		returnedScore := compositeKeyParts[3]
+		returnedUserEnterID := compositeKeyParts[4]
+		fmt.Printf("- found a user record from index:%s UserID:%s MatchID:%s MatchResult:%s Score:%s UserEnterID:%s\n",
+			objectType, returnedUserID, returnedMatchID, returnedMatchResult, returnedScore, returnedUserEnterID)
+		buffer.WriteString("{\"user_id\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(response.TxId)
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"Value\":")
-		// if it was a delete operation on given key, then we need to set the
-		//corresponding value null. Else, we will write the response.Value
-		//as-is (as the Value itself a JSON Integral)
-		if response.IsDelete {
-			buffer.WriteString("null")
-		} else {
-			if pointQuery {
-				buffer.WriteString(string(getParticipantPointBytes(response.Value)))
-
-			} else {
-				buffer.WriteString(string(response.Value))
-			}
-		}
-
-		buffer.WriteString(", \"Timestamp\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(time.Unix(response.Timestamp.Seconds, int64(response.Timestamp.Nanos)).String())
+		buffer.WriteString(returnedUserID)
 		buffer.WriteString("\"")
 
-		buffer.WriteString(", \"IsDelete\":")
+		buffer.WriteString(", \"match_id\":")
 		buffer.WriteString("\"")
-		buffer.WriteString(strconv.FormatBool(response.IsDelete))
+		buffer.WriteString(returnedMatchID)
+		buffer.WriteString("\"")
+
+		buffer.WriteString(", \"match_result\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(returnedMatchResult)
+		buffer.WriteString("\"")
+
+		buffer.WriteString(", \"score\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(returnedScore)
+		buffer.WriteString("\"")
+
+		buffer.WriteString(", \"user_enter_id\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(returnedUserEnterID)
 		buffer.WriteString("\"")
 
 		buffer.WriteString("}")
@@ -612,8 +614,7 @@ func queryHistoryParticipantInfo(stub shim.ChaincodeStubInterface, args []string
 	}
 	buffer.WriteString("]")
 
-	fmt.Printf("- end queryHistoryParticipantInfo:\n   %s\n", buffer.String())
-
+	fmt.Printf("- queryMatchInfoBasedOnUser returning:\n   %s\n", buffer.String())
 	return shim.Success(buffer.Bytes())
 }
 

@@ -85,12 +85,12 @@ func (t *MarathonChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 		return updateMatchEnrollScoreInfo(stub, args)
 	} else if function == "queryParticipantInfo" || function == "queryMatchEnrollScoreInfo" ||
 		function == "queryMatchInfo" {
-		return queryHelper(stub, args)
+		return queryHelper(function, stub, args)
 	} else if function == "queryHistoryParticipantInfo" || function == "queryHistoryMatchEnrollScoreInfo" ||
 		function == "queryHistoryMatchInfo" {
-		return queryHistoryHelper(stub, args)
+		return queryHistoryHelper(function, stub, args)
 	} else if function == "queryMatchInfoBasedOnUser" {
-		queryMatchInfoBasedOnUser(stub, args)
+		return queryMatchInfoBasedOnUser(stub, args)
 	} else if function == "addMatchInfo" {
 		return addMatchInfo(stub, args)
 	} else if function == "updateMatchInfo" {
@@ -112,7 +112,7 @@ func addMatchInfo(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	fmt.Println("- start addMatchInfo -")
 
 	// construct the key
-	key := args[0]
+	key := "MatchInfo_" + args[0]
 
 	currentTime := timeHelper()
 	fmt.Printf("[%s] <add> MatchInfo  %s", currentTime, key)
@@ -156,7 +156,7 @@ func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb
 	fmt.Println("- start addMatchEnrollScoreInfo -")
 
 	// construct the key
-	key := args[0]
+	key := "MatchEnrollScoreInfo_" + args[0]
 
 	currentTime := timeHelper()
 	fmt.Printf("[%s] <add> MatchEnrollScoreInfo  %s", currentTime, key)
@@ -214,7 +214,7 @@ func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	fmt.Printf("[%s] <add> Participant  %d", currentTime, userID)
 
 	// construct the key
-	key := args[0]
+	key := "ParticipantInfo_" + args[0]
 
 	// Check the Record in State
 	ParticipantInfoAsBytes, err := stub.GetState(key)
@@ -260,7 +260,7 @@ func updateMatchInfo(stub shim.ChaincodeStubInterface, args []string) pb.Respons
 	}
 
 	// construct the key
-	key := args[0]
+	key := "MatchInfo_" + args[0]
 
 	// Check the Record in State
 	ElementsAsBytes, err := stub.GetState(key)
@@ -309,7 +309,7 @@ func updateMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string)
 	}
 
 	// construct the key
-	key := args[0]
+	key := "MatchEnrollScoreInfo_" + args[0]
 
 	// Check the Record in State
 	ElementsAsBytes, err := stub.GetState(key)
@@ -362,7 +362,7 @@ func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.R
 	}
 
 	// construct the key
-	key := args[0]
+	key := "ParticipantInfo_" + args[0]
 
 	// Check the Record in State
 	ParticipantInfoAsBytes, err := stub.GetState(key)
@@ -423,7 +423,7 @@ func getParticipantPointBytes(ParticipantInfoRecordAsBytes []byte) []byte {
 	return participantPointRecordJSONBytes
 }
 
-func queryHelper(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+func queryHelper(funcName string, stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	var err error
 
 	fmt.Printf("- start queryHelper: %s\n", args[0])
@@ -432,7 +432,7 @@ func queryHelper(stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	}
 
 	// construct the key
-	key := args[0]
+	key := strings.TrimLeft(funcName, "query") + "_" + args[0]
 
 	queryInfoAsBytes, err := stub.GetState(key)
 	if err != nil {
@@ -458,7 +458,7 @@ func queryParticipantPoint(stub shim.ChaincodeStubInterface, args []string) pb.R
 	}
 
 	// construct the key
-	key := args[0]
+	key := "ParticipantInfo_" + args[0]
 
 	ParticipantInfoRecordAsBytes, err := stub.GetState(key)
 	if err != nil {
@@ -477,7 +477,7 @@ func queryParticipantPoint(stub shim.ChaincodeStubInterface, args []string) pb.R
 	return shim.Success(ParticipantInfoRecordAsBytes)
 }
 
-func queryHistoryHelper(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+func queryHistoryHelper(funcName string, stub shim.ChaincodeStubInterface, args []string) pb.Response {
 	var err error
 
 	if len(args) != 1 {
@@ -485,7 +485,7 @@ func queryHistoryHelper(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	}
 
 	// construct the key
-	key := args[0]
+	key := strings.TrimLeft(funcName, "queryHistory") + "_" + args[0]
 
 	fmt.Printf("- start queryHistoryHelper: %s\n", key)
 

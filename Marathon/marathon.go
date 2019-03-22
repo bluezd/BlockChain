@@ -32,10 +32,10 @@ import (
 )
 
 type ParticipantInfo struct {
-	User_Id         string `json:"user_id"`
+	User_ID         string `json:"user_id"`
 	User_Name       string `json:"user_name"`
 	Birthday        string `json:"birthday"`
-	National_Id     string `json:"national_id"`
+	National_ID     string `json:"national_id"`
 	Passport_Number string `json:"passport_number"`
 	Mobile          string `json:"mobile"`
 	Point           string `json:"point_free"`
@@ -49,7 +49,7 @@ type MatchInfo struct {
 }
 
 type MatchEnrollScoreInfo struct {
-	User_Enter_Id string `json:"user_enter_id"`
+	User_Enter_ID string `json:"user_enter_id"`
 	User_ID       string `json:"user_id"`
 	Match_ID      string `json:"match_id"`
 	Status        string `json:"status"`
@@ -169,7 +169,7 @@ func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb
 	}
 
 	matchEnrollScoreRecord := &MatchEnrollScoreInfo{
-		User_Enter_Id: args[0],
+		User_Enter_ID: args[0],
 		User_ID:       args[1],
 		Match_ID:      args[2],
 		Status:        args[3],
@@ -184,11 +184,6 @@ func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb
 
 	// Add Record to State
 	if err = stub.PutState(key, matchEnrollScoreInfoAsBytes); err != nil {
-		return shim.Error(err.Error())
-	}
-
-	indexName := "match~all"
-	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score, matchEnrollScoreRecord.User_Enter_Id}); err != nil {
 		return shim.Error(err.Error())
 	}
 
@@ -225,10 +220,10 @@ func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	}
 
 	participantRecord := &ParticipantInfo{
-		User_Id:         args[0],
+		User_ID:         args[0],
 		User_Name:       args[1],
 		Birthday:        args[2],
-		National_Id:     args[3],
+		National_ID:     args[3],
 		Passport_Number: args[4],
 		Mobile:          args[5],
 	}
@@ -343,11 +338,6 @@ func updateMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string)
 		return shim.Error(err.Error())
 	}
 
-	indexName := "match~all"
-	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score, matchEnrollScoreRecord.User_Enter_Id}); err != nil {
-		return shim.Error(err.Error())
-	}
-
 	fmt.Println("- end updateMatchEnrollScoreInfo")
 	return shim.Success(nil)
 }
@@ -380,7 +370,7 @@ func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.R
 	if len(args) == 6 {
 		participantRecord.User_Name = args[1]
 		participantRecord.Birthday = args[2]
-		participantRecord.National_Id = args[3]
+		participantRecord.National_ID = args[3]
 		participantRecord.Passport_Number = args[4]
 		participantRecord.Mobile = args[5]
 	} else if len(args) == 2 {
@@ -411,10 +401,10 @@ func getParticipantPointBytes(ParticipantInfoRecordAsBytes []byte) []byte {
 	_ = json.Unmarshal(ParticipantInfoRecordAsBytes, participantRecord)
 
 	participantPointRecord := struct {
-		User_Id string `json:"user_id"`
+		User_ID string `json:"user_id"`
 		Point   string `json:"point"`
 	}{
-		User_Id: participantRecord.User_Id,
+		User_ID: participantRecord.User_ID,
 		Point:   participantRecord.Point,
 	}
 
@@ -543,108 +533,73 @@ func queryHistoryHelper(funcName string, stub shim.ChaincodeStubInterface, args 
 	return shim.Success(buffer.Bytes())
 }
 
+// ===== Example: Parameterized rich query =================================================
+// queryVehiclePartByOwner queries for vehicle part based on a passed in owner.
+// This is an example of a parameterized query where the query logic is baked into the chaincode,
+// and accepting a single query parameter (owner).
+// =========================================================================================
 func queryMatchInfoBasedOnUser(stub shim.ChaincodeStubInterface, args []string) pb.Response {
-	if len(args) != 1 {
+	if len(args) < 1 {
 		return shim.Error("Incorrect number of arguments. Expecting 1")
 	}
-	userID := strings.ToLower(args[0])
-	fmt.Println("- start queryMatchInfoBasedOnUser ", userID)
 
-	// Query the username~all index by color
-	// This will execute a key range query on all keys starting with 'userName'
-	ResultsIterator, err := stub.GetStateByPartialCompositeKey("match~all", []string{userID})
+	userID := args[0]
+
+	//This is for native fabric: couchdb
+	//queryString := fmt.Sprintf("{\"selector\":{\"docType\":\"vehiclePart\",\"owner\":\"%s\"}}", owner)
+
+	//This is for bcs: bdb
+	queryString := fmt.Sprintf("SELECT valueJson FROM <STATE> WHERE json_extract(valueJson, '$.user_id') = '\"%s\"' AND json_extract(valueJson, '$.score') is not null", userID)
+
+	queryResults, err := getQueryResultForQueryString(stub, queryString)
 	if err != nil {
 		return shim.Error(err.Error())
 	}
-	defer ResultsIterator.Close()
+	return shim.Success(queryResults)
+}
 
+// =========================================================================================
+// getQueryResultForQueryString executes the passed in query string.
+// Result set is built and returned as a byte array containing the JSON results.
+// =========================================================================================
+func getQueryResultForQueryString(stub shim.ChaincodeStubInterface, queryString string) ([]byte, error) {
+
+	fmt.Printf("- getQueryResultForQueryString queryString:\n%s\n", queryString)
+
+	resultsIterator, err := stub.GetQueryResult(queryString)
+	if err != nil {
+		return nil, err
+	}
+	defer resultsIterator.Close()
+
+	// buffer is a JSON array containing QueryRecords
 	var buffer bytes.Buffer
 	buffer.WriteString("[")
 
 	bArrayMemberAlreadyWritten := false
-	var i int
-	for i = 0; ResultsIterator.HasNext(); i++ {
-		// Note that we don't get the value (2nd return variable), we'll just get the marble name from the composite key
-		responseRange, err := ResultsIterator.Next()
+	for resultsIterator.HasNext() {
+		queryResponse, err := resultsIterator.Next()
 		if err != nil {
-			return shim.Error(err.Error())
+			return nil, err
 		}
-
-		objectType, compositeKeyParts, err := stub.SplitCompositeKey(responseRange.Key)
-		if err != nil {
-			return shim.Error(err.Error())
-		}
+		// Add a comma before array members, suppress it for the first array member
 		if bArrayMemberAlreadyWritten == true {
 			buffer.WriteString(",")
 		}
-		returnedUserID := compositeKeyParts[0]
-		returnedMatchID := compositeKeyParts[1]
-		returnedMatchResult := compositeKeyParts[2]
-		returnedScore := compositeKeyParts[3]
-		returnedUserEnterID := compositeKeyParts[4]
-		fmt.Printf("- found a user record from index:%s UserID:%s MatchID:%s MatchResult:%s Score:%s UserEnterID:%s\n",
-			objectType, returnedUserID, returnedMatchID, returnedMatchResult, returnedScore, returnedUserEnterID)
-		buffer.WriteString("{\"user_id\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(returnedUserID)
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"match_id\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(returnedMatchID)
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"match_result\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(returnedMatchResult)
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"score\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(returnedScore)
-		buffer.WriteString("\"")
-
-		buffer.WriteString(", \"user_enter_id\":")
-		buffer.WriteString("\"")
-		buffer.WriteString(returnedUserEnterID)
-		buffer.WriteString("\"")
-
-		buffer.WriteString("}")
+		buffer.WriteString(string(queryResponse.Value))
 		bArrayMemberAlreadyWritten = true
 	}
 	buffer.WriteString("]")
 
-	fmt.Printf("- queryMatchInfoBasedOnUser returning:\n   %s\n", buffer.String())
-	return shim.Success(buffer.Bytes())
+	fmt.Printf("- getQueryResultForQueryString queryResult:\n%s\n", buffer.String())
+
+	return buffer.Bytes(), nil
 }
 
 func timeHelper() string {
 	t := time.Now()
 	currentTime := t.Format("2006-01-02T15:04:05")
 	return currentTime
-}
-
-// ===============================================
-// createIndex - create search index for ledger
-// ===============================================
-func createIndex(stub shim.ChaincodeStubInterface, indexName string, attributes []string) error {
-	fmt.Println("- start create index")
-	var err error
-	//  ==== Index the object to enable range queries, e.g. return all parts made by supplier b ====
-	//  An 'index' is a normal key/value entry in state.
-	//  The key is a composite key, with the elements that you want to range query on listed first.
-	//  This will enable very efficient state range queries based on composite keys matching indexName~color~*
-	indexKey, err := stub.CreateCompositeKey(indexName, attributes)
-	if err != nil {
-		return err
-	}
-	//  Save index entry to state. Only the key name is needed, no need to store a duplicate copy of object.
-	//  Note - passing a 'nil' value will effectively delete the key from state, therefore we pass null character as value
-	value := []byte{0x00}
-	stub.PutState(indexKey, value)
-
-	fmt.Println("- end create index")
-	return nil
 }
 
 // ===================================================================================

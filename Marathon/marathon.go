@@ -549,7 +549,8 @@ func queryMatchInfoBasedOnUser(stub shim.ChaincodeStubInterface, args []string) 
 	//queryString := fmt.Sprintf("{\"selector\":{\"docType\":\"vehiclePart\",\"owner\":\"%s\"}}", owner)
 
 	//This is for bcs: bdb
-	queryString := fmt.Sprintf("SELECT valueJson FROM <STATE> WHERE json_extract(valueJson, '$.user_id') = '\"%s\"' AND json_extract(valueJson, '$.score') is not null", userID)
+	//queryString := fmt.Sprintf("SELECT valueJson FROM <STATE> WHERE json_extract(valueJson, '$.user_id', '$.score') = '[\"%s\",\"90\"]'", userID)
+	queryString := fmt.Sprintf("SELECT valueJson FROM <STATE> WHERE json_extract(valueJson, '$.user_id') = '%s' AND json_extract(valueJson, '$.score') IS NOT NULL", userID)
 
 	queryResults, err := getQueryResultForQueryString(stub, queryString)
 	if err != nil {

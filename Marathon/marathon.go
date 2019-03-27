@@ -75,7 +75,7 @@ func (t *MarathonChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 	// Handle different functions
 	if function == "addParticipantInfo" {
 		return addParticipantInfo(stub, args)
-	} else if function == "updateParticipantInfo" || function == "updateParticipantPoint" {
+	} else if function == "updateParticipantInfo" {
 		return updateParticipantInfo(stub, args)
 	} else if function == "queryParticipantPoint" {
 		return queryParticipantPoint(stub, args)
@@ -195,8 +195,8 @@ func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	var err error
 	var userID int
 
-	if len(args) != 6 {
-		return shim.Error("!! Incorrect number of arguments, Expecting 6 !!")
+	if len(args) != 7 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 7 !!")
 	}
 
 	// ==== Input Check ====
@@ -226,6 +226,7 @@ func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 		National_ID:     args[3],
 		Passport_Number: args[4],
 		Mobile:          args[5],
+		Point:           args[6],
 	}
 
 	var ParticipantInfoRecordAsBytes []byte
@@ -347,6 +348,10 @@ func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.R
 
 	// ==== Input Check ====
 	fmt.Println("- start updateParticipantInfo -")
+	if len(args) != 7 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 7 !!")
+	}
+
 	if len(args[0]) <= 0 {
 		return shim.Error("1st argument user id must be a non-empty string")
 	}
@@ -367,17 +372,12 @@ func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.R
 		return shim.Error(err.Error())
 	}
 
-	if len(args) == 6 {
-		participantRecord.User_Name = args[1]
-		participantRecord.Birthday = args[2]
-		participantRecord.National_ID = args[3]
-		participantRecord.Passport_Number = args[4]
-		participantRecord.Mobile = args[5]
-	} else if len(args) == 2 {
-		participantRecord.Point = args[1]
-	} else {
-		return shim.Error("!! Incorrect number of arguments, Expecting 6 !!")
-	}
+	participantRecord.User_Name = args[1]
+	participantRecord.Birthday = args[2]
+	participantRecord.National_ID = args[3]
+	participantRecord.Passport_Number = args[4]
+	participantRecord.Mobile = args[5]
+	participantRecord.Point = args[6]
 
 	participantRecordJSONBytes, err := json.Marshal(participantRecord)
 	if err != nil {

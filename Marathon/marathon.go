@@ -32,10 +32,10 @@ import (
 )
 
 type ParticipantInfo struct {
-	User_Id         string `json:"user_id"`
+	User_ID         string `json:"user_id"`
 	User_Name       string `json:"user_name"`
 	Birthday        string `json:"birthday"`
-	National_Id     string `json:"national_id"`
+	National_ID     string `json:"national_id"`
 	Passport_Number string `json:"passport_number"`
 	Mobile          string `json:"mobile"`
 	Point           string `json:"point_free"`
@@ -49,7 +49,7 @@ type MatchInfo struct {
 }
 
 type MatchEnrollScoreInfo struct {
-	User_Enter_Id string `json:"user_enter_id"`
+	User_Enter_ID string `json:"user_enter_id"`
 	User_ID       string `json:"user_id"`
 	Match_ID      string `json:"match_id"`
 	Status        string `json:"status"`
@@ -75,7 +75,7 @@ func (t *MarathonChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response
 	// Handle different functions
 	if function == "addParticipantInfo" {
 		return addParticipantInfo(stub, args)
-	} else if function == "updateParticipantInfo" || function == "updateParticipantPoint" {
+	} else if function == "updateParticipantInfo" {
 		return updateParticipantInfo(stub, args)
 	} else if function == "queryParticipantPoint" {
 		return queryParticipantPoint(stub, args)
@@ -169,7 +169,7 @@ func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb
 	}
 
 	matchEnrollScoreRecord := &MatchEnrollScoreInfo{
-		User_Enter_Id: args[0],
+		User_Enter_ID: args[0],
 		User_ID:       args[1],
 		Match_ID:      args[2],
 		Status:        args[3],
@@ -188,7 +188,7 @@ func addMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string) pb
 	}
 
 	indexName := "match~all"
-	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score, matchEnrollScoreRecord.User_Enter_Id}); err != nil {
+	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score, matchEnrollScoreRecord.User_Enter_ID}); err != nil {
 		return shim.Error(err.Error())
 	}
 
@@ -200,8 +200,8 @@ func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	var err error
 	var userID int
 
-	if len(args) != 6 {
-		return shim.Error("!! Incorrect number of arguments, Expecting 6 !!")
+	if len(args) != 7 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 7 !!")
 	}
 
 	// ==== Input Check ====
@@ -225,12 +225,13 @@ func addParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.Resp
 	}
 
 	participantRecord := &ParticipantInfo{
-		User_Id:         args[0],
+		User_ID:         args[0],
 		User_Name:       args[1],
 		Birthday:        args[2],
-		National_Id:     args[3],
+		National_ID:     args[3],
 		Passport_Number: args[4],
 		Mobile:          args[5],
+		Point:           args[6],
 	}
 
 	var ParticipantInfoRecordAsBytes []byte
@@ -344,7 +345,7 @@ func updateMatchEnrollScoreInfo(stub shim.ChaincodeStubInterface, args []string)
 	}
 
 	indexName := "match~all"
-	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score, matchEnrollScoreRecord.User_Enter_Id}); err != nil {
+	if err = createIndex(stub, indexName, []string{matchEnrollScoreRecord.User_ID, matchEnrollScoreRecord.Match_ID, matchEnrollScoreRecord.Match_Result, matchEnrollScoreRecord.Score, matchEnrollScoreRecord.User_Enter_ID}); err != nil {
 		return shim.Error(err.Error())
 	}
 
@@ -357,6 +358,10 @@ func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.R
 
 	// ==== Input Check ====
 	fmt.Println("- start updateParticipantInfo -")
+	if len(args) != 7 {
+		return shim.Error("!! Incorrect number of arguments, Expecting 7 !!")
+	}
+
 	if len(args[0]) <= 0 {
 		return shim.Error("1st argument user id must be a non-empty string")
 	}
@@ -377,17 +382,12 @@ func updateParticipantInfo(stub shim.ChaincodeStubInterface, args []string) pb.R
 		return shim.Error(err.Error())
 	}
 
-	if len(args) == 6 {
-		participantRecord.User_Name = args[1]
-		participantRecord.Birthday = args[2]
-		participantRecord.National_Id = args[3]
-		participantRecord.Passport_Number = args[4]
-		participantRecord.Mobile = args[5]
-	} else if len(args) == 2 {
-		participantRecord.Point = args[1]
-	} else {
-		return shim.Error("!! Incorrect number of arguments, Expecting 6 !!")
-	}
+	participantRecord.User_Name = args[1]
+	participantRecord.Birthday = args[2]
+	participantRecord.National_ID = args[3]
+	participantRecord.Passport_Number = args[4]
+	participantRecord.Mobile = args[5]
+	participantRecord.Point = args[6]
 
 	participantRecordJSONBytes, err := json.Marshal(participantRecord)
 	if err != nil {
@@ -411,10 +411,10 @@ func getParticipantPointBytes(ParticipantInfoRecordAsBytes []byte) []byte {
 	_ = json.Unmarshal(ParticipantInfoRecordAsBytes, participantRecord)
 
 	participantPointRecord := struct {
-		User_Id string `json:"user_id"`
+		User_ID string `json:"user_id"`
 		Point   string `json:"point"`
 	}{
-		User_Id: participantRecord.User_Id,
+		User_ID: participantRecord.User_ID,
 		Point:   participantRecord.Point,
 	}
 
